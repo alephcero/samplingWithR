@@ -1,0 +1,594 @@
+---
+title: "TP1 - Muestreo"
+author: "Felipe Gonzalez"
+date: "16 de octubre de 2015"
+output: pdf_document
+---
+
+
+```{r,echo=FALSE,message=FALSE}
+library(xlsx)
+library(Hmisc)
+library(survey)
+library(sampling)
+rm(list=ls())
+
+```
+
+
+#1- Diseño muestral
+```{r, message=FALSE,warning=FALSE}
+marco.personas = spss.get("marco_personas.sav", use.value.labels=TRUE)
+n = 1100
+N = nrow(marco.personas)
+```
+
+  Se presenta un marco muestral compuesto por un listado de personas (N =`r N`) y su *Condición de actividad*. El objetivo es seleccionar una muestra de tamaño `r n` que permita estimar la proporción de población económicamente activa (PEA) para el mismo trimestre del año 2015. 
+
+```{r, comment=""}
+head(marco.personas)
+```
+
+##a) Determinar el margen de error
+Se solicita determinar el margen de error obtenido a partir de un Muestreo Simple al Azar (MSA) asumiendo
+un nivel de confianza del 95% y la proporción poblacional la que se puede obtener del marco en base a la información del año 2014, brindar una idea del margen de error con el cual se trabajará para ese tamaño de muestra.
+
+
+El margen de error se calcula siguiendo la siguiente fórmula:
+
+$$c = Z_{\alpha/2} \sqrt{(1 - \frac{n}{N})} \frac{S}{\sqrt{n}}$$
+
+Para poder calcular dicho margen es necesario obtener el valor de la distribución normal para ese nivel de confianza (*Z*) y una medida de dispersión de la variable a analizar (*S*).
+
+Para obtener *Z* solo hay que obtener dicho valor de la tabla correspondiente a partir de los parámetros dados:
+
+```{r}
+confianza = 0.95
+riesgo = (1 - confianza)/2
+z = qnorm(1 - riesgo)
+```
+
+De este modo obtenemos para **Z** el siguiente valor: **`r round(z,2)`**
+
+Para la medida de dispersión de una proporción se obtiene de acuerdo a la siguiente fórmula. 
+
+$$S =  p (1 - p)$$ 
+
+Para lograr dicha medida, es necesario obtener la distribución de frecuencias de la condición de actividad para observar,de este modo, en ese año qué proporción pertenecía a la población económicamente activa (PEA).
+
+El comportamiento de la variable para el mismo trimestre de 2014 se caracteriza por la siguiente a la distribución de frecuencias:
+
+```{r,comment=""}
+cuadro = prop.table(table(marco.personas$estado.2014))
+#se calcula la PEA como la suma de la población ocupada y desocupada
+p = as.numeric(cuadro[names(cuadro)=="Ocupado"] + cuadro[names(cuadro)=="Desocupado"])
+s = p * (1 - p)
+cuadro
+```
+
+De este modo obtenemos a su vez los valores de **p** (**`r round(p,2)`**) y de **S** (**`r round(s,2)`**). Con estos valores, sumados al valor de **Z** (**`r round(z,2)`**) se puede obtener el valor del margen de error
+
+```{r}
+margen.error = z * sqrt(1-(n/N)) * s/sqrt(n)
+```
+
+En conclusión, el margen de error obtenido es del orden del **`r round(margen.error*100,2)`%**
+
+##b) Coeficiente de variación
+El organismo solicitante, tiene como parámetros de calidad, que el coeficiente de variación de las estimaciones que surjan de estudios por muestreo no deben superar el 5% en el caso de las estimaciones de parámetros principales (en este caso, la proporción de PEA), y no debe ser superior al 20% para cualquier otra estimación. 
+
+El coeficiente de variación de una estimación para una proporción a partir de una muestra se obtiene de acuerdo a la siguiente fórmula:
+
+
+$$CV_{MSA}(\hat{P}_{\pi y}) =  \frac{\sqrt{V_{MSA}(\hat{P}_{\pi y})}}{E_{MSA}(\hat{P}_{\pi y})}$$
+
+
+Bajo un diseño de muestreo aleatorio simple para una proporción, la fórmula para un estimador de la varianza es la siguiente:
+
+$$V_{MSA}(\hat{p}_{y\pi}) = (\frac{1}{n} - \frac{1}{N}) \frac{N}{N-1} P_{y}(1-P_{y}) $$
+
+Por lo tanto, reemplazando, se obtiene:
+
+$$CV_{MSA}(\hat{P}_{\pi y}) =  \frac{\sqrt{(\frac{1}{n} - \frac{1}{N}) \frac{N}{N-1} P_{y}(1-P_{y})}}{P_{y}}$$
+
+
+```{r}
+obtenerCV = function(n,N,s,p){
+  return(sqrt( (1/n - 1/N) * (N/(N-1)) * s)/p)
+}
+  
+cv = obtenerCV(n,N,s,p)
+```
+
+Al calcular el coeficiente de variación con N = `r N`, n = `r n`, p = `r p` y s = `r s`, se obtiene un **CV** de `r round(cv*100,2)`%
+
+##c) Qué tamaño de muestra hubiera sido suficiente para cumplir con el requerimiento de un CV del 5%?
+
+Con un tamaño de muestra de `r n` casos se obtuvo un coeficiente de variación del `r round(cv*100,2)`%. Por lo tanto, un tamaño de muestra más pequeño podría arrojar un coeficiente menor de 5% a menor costo. Para llegar a dicho tamaño, existen dos caminos. Dada la fórmula anterior para calcular el coeficiente de variación, puede minimizarse el valor de **n** para que cumpla con la restricción impuesta por el organismo. Por otro lado, existe una fórmula de trabajo que puede acercar el valor de **n** a partir de los valores del coeficiente de variación dado y el buscado. 
+
+### Minimizar *n*
+```{r}
+#Se establece un valor para el CV deseado
+cv.buscado = 0.05                 
+#Se fija un valor para el nuevo tamaño de muestra a partir del existente
+n.minim = n
+#Se inicia un while loop comparando el CV obtenido con el deseado, mientras aquel sea menor a este
+while(cv<cv.buscado){             
+  cv = obtenerCV(n.minim,N,s,p)
+  #Se puede disminuir hasta alcanzar el nuevo tamaño de muestra (n.minim)
+  n.minim = n.minim-1
+}
+```
+
+Este método arroja un nuevo tamaño de muestra de n = `r n.minim`
+
+### Formula de trabajo 
+
+Asumiendo un tamaño "grande" de *N* (en este caso N es de `r N` casos) se puede derivar el tamaño de muestra *n* a partir de la siguiente fórmula de trabajo dada un coeficiente de variación deseado ($CV_0$) y el observado en el marco ($CV_y$):
+
+$$n \simeq ( \,\frac{CV_y}{CV_0}) \, ^2 \approx ( \, \frac{1-P}{P}) \, \frac{1}{CV_0^2}$$
+
+Reemplazando para los valores del problema:
+
+$$n \simeq ( \,\frac{`r round(cv,2)`}{`r round(cv.buscado,2)`}) \, ^2 \approx ( \, \frac{1-`r round(p,2)`}{`r round(p,2)`}) \, \frac{1}{`r round(cv.buscado,2)`^2} \approx `r round(((1-p)/p)/(0.05*0.05))` $$
+
+```{r}
+#Se calcula n de acuerdo a la formula de trabajo
+n.form = ((1-p)/p)/(0.05*0.05)
+```
+
+Como se puede observar, los tamaños de muestra calculados a partir de un coeficiente de variación objetivo por los diferentes métodos son similares: minimizando *n* se obtiene una muestra de tamaño de muestra de `r round(n.minim)` casos mientras que con la aproximación de la fórmula de trabajo se obtiene un tamaño de `r round(n.form)` casos.
+
+##d) ¿Cuáles son las probabilidades de inclusión de primer y segundo orden para el diseño planteado?
+
+Se parte del supuesto de un diseño de muestreo aleatorio simple con tamaño de muestra fijo. En este diseño, las probabilidades de inclusión de primer orden están dadas por la siguiente ecuación:
+
+```{r}
+pik = n/N
+pikl = (n*(n-1))/(N*(N-1))
+```
+
+$$\pi_{k} =  \frac{n}{N}$$
+
+$$\pi_{k} =  \frac{`r n`}{`r N`} = `r round(n/N,4)`$$
+
+A su vez, las probabilidades de inclusión de segundo orden se encuentran dadas por:
+
+$$\pi_{kl} =  \frac{n(n-1)}{N(N-1)}$$
+
+$$\pi_{kl} =  \frac{`r n`(`r n-1`)}{`r N`(`r N-1`)} = `r round(pikl,4)`$$
+
+## e) En el caso que se quisiera utilizar un muestreo sistemático tradicional
+### a. ¿Cuántas muestras posibles existen?
+Dados los tamaños de N (`r N`) y n (`r n`), se puede calcular el intervalo de selección *k*:
+
+```{r}
+k = as.integer(N/n)
+```
+
+
+Con este intervalo *k* = `r k`, bajo un muestreo sistemático la cantidad de muestras posibles ($\Omega_{SISn} = k$) son `r k`. Sin embargo este procedimiento implicaría dejar `r N-(n*k)` casos nula probabilidad de inclusión. Estos podrían incluirse en una muestra adicional, lo que implicaría que haya un total de `r k + 1` muestras, aunque con probabilidades de inclusión diferentes. Este es uno de los inconveniente con el muestreo sistemático tradicional.
+
+
+### b. ¿Son todas de igual tamaño?
+
+La única manera que haya tamaños de muestra iguales es que el tamaño de *n* sea un factor de *N*. Por lo tanto para N = `r N` solo existen 2 tamaños de muestra que den muestras iguales: 7 o 11717. Para el resto de los tamaños de muestra no habrá muestras de igual tamaño
+
+
+### c. ¿Cuáles son las probabilidades de inclusión de primer y segundo orden?
+
+Las probabilidades de inclusión varían notablemente de acuerdo al intervalo elegido y al tamaño de muestra. Para *n* factor de *N*  $\pi_k = n/N = 1/k$ y $\pi_{kl} = n/N$ si tanto el elemento $k$ como el elemento $l$ pertenecen ambos a la muestra. En caso contrario $\pi_{kl} = 0$  
+
+### d. En el caso de que así no fueran ¿cómo podrían solucionarlo?
+
+Pueden utilizarse diferentes cantidades $m$ de arranques. En caso de arranques múltiples cada arranque genera una submuestra de tamaño $n/m$. Por ende, *n* debe ser factor de *N* y a su vez *m* de *n*. Para solucionar este último problema, puede realizarse un muestreo sistemático circular en lugar de un muestreo sistemático tradicional. 
+
+
+### e. Para la solución en *d* ¿cuáles son las probabilidades de inclusión de primer y segundo orden? 
+
+Para un muestreo sistemático tradicional donde *n* es factor de *N* y a su vez *m* de *n* $\pi_k = m / mk = n / N$ y $\pi_{kl} = n / N$  si tanto el elemento $k$ como el elemento $l$ pertenecen ambos a la misma submuestra. En cambio si pertenecen a submuestras distintas $\pi_{kl} = \frac{n}{N} \frac{m-1}{mk-1}$.
+
+### f. ¿Cuál sería el problema adicional de estos métodos de selección y cómo podría solucionarlos?
+
+El problema adicional es el aumento de la varianza del estimador en comparación con la varianza del estimador bajo muestreo aleatorio simple.  
+
+#2- Selección de la muestra
+
+En **R** el proceso de selección de una muestra de acuerdo al diseño de muestreo aleatorio simple sin reposición puede hacerse de dos maneras. En primer lugar puede generarse un vector de números pseudo-aleatorios dentro del marco muestral para luego ordenar el mismo y seleccionar los primeros casos. En segundo lugar, puede hacerse uso de la función *mstage()* del paquete *sampling* que implementa un muestreo multietápico con determinadas probabilidades de inclusión.
+
+## Generación de números pseudo-aleatorios
+
+```{r,comment=""}
+#Establecer la semilla para el proceso psuedo-aleatorio
+set.seed(1)                                                           
+#Generar vector de números entre 0 y 1 con largo igual al tamaño del marco muestral 
+marco.personas$numeroRandom = runif(N, min = 0, max = 1)                                
+#Ordenar el marco por este numero
+marco.personas = marco.personas[order(marco.personas$numeroRandom),]  
+#Seleccionar una cantidad de filas igual al tamaño de muestra n
+muestra1 = marco.personas[1:n,1:ncol(marco.personas)-1]
+write.xlsx(muestra1,"punto2_muestra1.xls",row.names = F)
+```
+
+Posterior a esta selección, queda establecida la muestra seleccionada de la cual se muestran sus primeros 5 registros:
+
+``` {r, comment=""}
+head(muestra1)
+```
+
+## La función *mstage()* del paquete *sampling*
+La función *mstage()* toma como parámetros el marco muestral y el tamaño de muestra deseado. Pueden especificarse diferentes etapas con estratos y clusters, métodos de selección unitarios y un vector de probabilidades de inclusión. Ante la ausencia de los mismos, no se realizan etapas previas, el método de selección de unidades por defecto seleccionado es el de muestreo aleatorio simple sin reemplazo y se asignan las mismas probabilidades de inclusión para todos los casos.
+
+```{r}
+#Se construye la muestra 
+set.seed(1)
+m = mstage(data = marco.personas, size = n)
+#Se extrae del marco muestral la muestra seleccionada con la función getdata()
+muestra2 = getdata(marco.personas,m)[[1]]
+names(muestra2)[ncol(muestra2)]="probInc"
+write.xlsx(muestra2,"punto2_muestra2.xls",row.names = F)
+```
+
+De igual modo, posterior a esta selección, queda establecida la muestra seleccionada de la cual se muestran sus primeros registros:
+
+``` {r, comment=""}
+head(muestra2)
+```
+
+#3- Estimación
+```{r, message=FALSE,warning=FALSE}
+listaBases = read.xlsx("Distribucion datos tp1.xlsx",1,endRow = 30)
+casoFelipe = listaBases$"datos.TP1"[listaBases$Nombre=="Felipe" & listaBases$Apellido=="Gonzalez"]
+muestra = spss.get(paste("bases muestras para los alumnos/muestra_personas_",casoFelipe,
+                         ".sav",sep=""), use.value.labels=TRUE)
+```
+
+Se parte de una muestra con `r nrow(muestra)` casos y `r ncol(muestra)` variables. El encabezado de la tabla es el siguiente:
+
+```{r, comment=""}
+head(muestra)
+```
+
+
+##a) Estimar el total y la proporción de PEA y brindar un Coeficiente De Variación (CV) para dicha estimación. Según la estimación, ¿la proporción de PEA creció o disminuyó en relación al año 2014?
+
+Para realizar estimaciones el paquete de software *survey* permite obtener los estimadores y sus desvíos estándar. De todos modos, para esta primer estimación se hará también paso a paso siguiendo las fórmulas. El resto se procederá a estimar utilizando las diferentes funciones del paquete *survey*. 
+
+Para poder estimar el total poblacional de la población económicamente activa (PEA) se utilizará el estimador Horvitz Thompson, de acuerdo a la siguiente fórmula:
+
+$$\hat{T_{Y-HT}} = \hat{T_{\pi y}} = \sum\limits_{k \in s} \frac{Y_k}{\pi_k} = \sum\limits_{k \in U} \frac{I_k Y_k}{\pi_k} = \sum\limits_{k \in U} w_k I_k Y_k$$
+
+Para poder realizar dicha estimación es necesario introducir los pesos ($w_k$) calculados a partir de las probabilidades de inclusión de primer orden ($\pi_k$). Para esto se asume que el modelo de selección es el de muestreo aleatorio simple sin reposición en función del marco muestral provisto en los pasos anteriores. 
+
+
+Por lo tanto es posible asumir que las probabilidades de inclusión (de primer y de segundo orden) continúan siendo las mismas.
+
+$$\pi_k = `r round(pik,4)`$$
+
+$$\pi_{kl} = `r round(pikl,4)`$$
+
+
+En función de estos $\pi_k$ pueden calcularse los pesos o ponderadores del siguiente modo:
+
+$$w = \frac{1}{\pi_k} = `r round(1/pik,2)`$$
+
+```{r}
+#Se crean estos vectores en la tabla de datos
+muestra$pik = pik
+muestra$w = 1/pik
+```
+
+A su vez, es necesario establecer un vector *booleano* o *dummy* que permita identificar a los casos pertenecientes a la *PEA* ($I_k$).
+
+```{r}
+muestra$ik = as.numeric(muestra$estado == "Ocupado" | muestra$estado == "Desocupado" )
+```
+
+Con estos insumos ya es posible calcular el total.
+
+```{r}
+#Se calcula el total a partir de la sumatoria a lo largo del vector resultante de multipliar ik por los pesos  
+total.ht = round(sum(muestra$w * muestra$ik))
+```
+
+El total para la población económicamente activa de 2015 es de 43321 personas. 
+
+Para obtener el coeficiente se puede repetir los procedimientos realizados en punto **b** con la misma fórmula, aunque en esta ocasión para un total:
+
+$$CV_{MSA}(\hat{T}_{\pi y}) =  \frac{\sqrt{V_{MSA}(\hat{T}_{\pi y})}}{E_{MSA}(\hat{T}_{\pi y})}$$
+
+Para poder continuar es necesario calcular un estimador de la varianza $V_{MSA}(\hat{T}_{\pi y})$. La fórmula bajo muestro simple al azar para un estimador de la varianza es:
+
+
+$$V_{MSA}(\hat{T}_{\pi y}) = N^2 (\frac{1}{n} - \frac{1}{N}) s_{y}^2 $$
+
+Por lo tanto, reemplazando, se obtiene:
+
+$$CV_{MSA}(\hat{P}_{\pi y}) =  \frac{\sqrt{N^2 (\frac{1}{n} - \frac{1}{N}) s_{y}^2}}{\hat{T_{\pi y}}}$$
+
+Habiendo obtenido el estimador $\hat{T_{\pi y}}$ queda solo calcular ese estimador de la varianza a partir de la varianza de la variable $I_k$ creada que determina si cada elemento pertenece a la PEA.
+
+
+```{r}
+#Se estima la varianza de la muestra
+var.ik = var(muestra$ik)
+#se calcula la varianza del estimador
+var.total.ht = N^2*((1/n)-(1/N)) * var.ik
+#Se calcula el coeficiente de variación
+cv.total.ht = sqrt(var.total.ht)/total.ht
+```
+  
+De este modo se obtiene un coeficiente de variación del `r round(cv.total.ht*100,2)`
+  
+Por otro lado, el paquete *survey* permite construir un objeto de tipo específico que replica un diseño muestral complejo. En primer lugar, mediante la función *svydesign()* se construye dicho objeto utilizando como parámetros la tabla de datos, un vector con los pesos ($w_k$) y un vector de identificación de clusters que por tratarse de un muestreo simple al azar se establece como igual a 1. 
+
+```{r}
+muestra2 = svydesign(id=~1,        #vector de clusters (fijado en 1)
+                     weights=~w,   #vector de pesos definidos previamente
+                     data=muestra) #tabla de datos
+```
+
+
+Una vez construido dicho objeto, *survey* cuenta con una serie de funciones que permite extraer del objeto con la tabla de datos y la información del diseño los estimadores junto con el desvío estándar de los mismos.
+
+De este modo se puede calcular un total:
+```{r,comment=""}
+round(svytotal(~ik, muestra2)[[1]])
+```
+
+Así como también su coeficiente de variación:
+```{r,comment=""}
+round(cv(svytotal(~ik, muestra2))[[1]]*100,2)
+```
+
+```{r}
+tabla.resumen = as.data.frame(svytotal(~ik, muestra2))
+names(tabla.resumen)=c("total","desvio")
+tabla.resumen$cv=round(tabla.resumen$desvio / tabla.resumen$total * 100,2)
+tabla.resumen$total[1]=round(tabla.resumen$total[1])
+tabla.resumen[2,] = c(total.ht,
+                      sqrt(var.total.ht),
+                      round(cv.total.ht*100,2))
+row.names(tabla.resumen) = c("survey","formulas")
+```
+
+Como se puede observar en la tabla resumen, los resultados a los que se llegan son similares. Las pequeñas diferencias del 0,01% se deben a que los números reales en los sistemas informáticos al no ser de base decimal sino binario se almacenan como aproximaciones. 
+
+**Cuadro 3.a.1 - Estimaciones del total de la PEA, desvío estándar y coeficiente de variación**
+```{r,comment="",echo=FALSE}
+tabla.resumen
+total = as.character(tabla.resumen$total[[2]])
+coeficiente = as.character(tabla.resumen$cv[[2]])
+```
+
+Por lo tanto, se estima para la población económicamente activa un total de `r total` con un coeficiente de variación del `r coeficiente`%
+
+Del mismo modo que se calculó un total con la función *svytotal()*, el paquete *survey* también provee de una función para calcular una proporción, aunque mediante un rodeo. La función a utilizar es  *svymean()* y tal cual su nombre lo indica, lo que efectivamente hace es calcular un promedio. Al utilizar vectores *booleanos* o *dummies* con valor 1 para el elemento deseado, calcular una proporción no es diferente a calcular un promedio de una variable que toma valores 1 y 0 y dividir por el total de registros. Obviamente, ese total también es un estimado e impacta  
+
+Por lo tanto, para establecer una proporción utilizando el paquete *survey* conviene transformar la variable en un factor con valores *Activo* para quienes forman parte de la PEA ($I_k = 1$) e *Inactivos* para los que no. Esta factorización de las variables permite que el paquete asimile rápidamente qué subgrupos debe conformar y asignarles 1s y 0s automáticamente. 
+
+```{r}
+muestra2$variables$pea = muestra2$variables$ik
+muestra2$variables$pea[muestra2$variables$pea==1] = "Activos"
+muestra2$variables$pea[muestra2$variables$pea==0] = "Inactivos"
+```
+
+Una vez factorizada la variable se puede calcular la proporción de la PEA junto con su coeficiente de variación.
+
+```{r,comment=""}
+round(svymean(~pea, muestra2)*100,2)
+round(cv(svymean(~pea, muestra2))*100,2)
+```
+
+De este modo se puede observar que existe una proporción de la población perteneciente a la PEA del orden del `r round(svymean(~pea, muestra2)[[1]] *100,2)`% con un CV del `r round(cv(svymean(~pea, muestra2))[[1]]*100,2)`%. En **2014** se registraba una proporción de la PEA del orden del `r round(p*100,2)`. Sin embargo, se se incluyen los intervalos de confianza para la estimación de **2015** los resultados no son convincentes en la medida en que el parámetro de 2014 queda comprendido dentro de los intervalos de confianza del estimador de **2014**:
+
+```{r,comment=""}
+round(confint(svymean(~pea,muestra2))[1,]*100,2)
+```
+
+##b) Estimar la proporción de PEA por sexo, grupo de edad (10-17, 18-40, 41-59, 60 y más), nivel educativo, situación conyugal, y regiones (NEA, NOA, Pampeana, Cuyo, Patagonia, CABA). Teniendo en cuenta el límite del 20% de CV para publicar resultados, indicar si es posible publicar todas las estimaciones, y en el caso de que así no fuera, indicar cómo podría solucionarlo.
+
+A continuación se calcula la proporción de PEA cruzadas por diferentes variables mediante la función *svymean()* del paquete *survey*.
+```{r}
+#Sexo
+tablaSexo = svyby(~pea,~sexo, muestra2, svymean, keep.var=F)
+tablaSexo = tablaSexo[,2:3]
+names(tablaSexo) = c("Activos","Inactivos")
+tablaSexo = round(100 * tablaSexo, 2)
+tablaSexoCV = round(cv(svyby(~pea,~sexo, muestra2, svymean))*100,2)
+names(tablaSexoCV) = c("CV Activos","CV Inactivos")
+```
+
+Al ver la proporción de PEA por sexo se observa que dentro de los varones, la proporción de población económicamente activa es mayor.
+
+**Cuadro 3.b.1 - Proporción de PEA por sexo en %**
+```{r,comment="",echo=FALSE}
+tablaSexo
+```
+
+Como se puede observar en las tablas, ninguno de los coeficientes supera la restricción del 20%.
+
+**Cuadro 3.b.2 - Coeficiente de variación de las estimaciones en %**
+```{r,comment="",echo=FALSE}
+tablaSexoCV
+```
+
+
+```{r,echo=FALSE}
+#Edad
+muestra2$variables$edadG = NA
+muestra2$variables$edadG[muestra2$variables$edad<17] = 1 
+muestra2$variables$edadG[muestra2$variables$edad>=18 & muestra2$variables$edad<=40] = 2
+muestra2$variables$edadG[muestra2$variables$edad>=41 & muestra2$variables$edad<=59] = 3
+muestra2$variables$edadG[muestra2$variables$edad>=60] = 4
+muestra2$variables$edadG = factor(muestra2$variables$edadG,levels=1:4,labels=c("10-17","18-40","41-59","60 y más"))
+```
+
+
+```{r}
+#Edad
+tablaEdad = svyby(~pea,~edadG, muestra2, svymean, keep.var=F)
+tablaEdad = tablaEdad[,2:3]
+names(tablaEdad) = c("Activos","Inactivos")
+tablaEdad = round(100 * tablaEdad, 2)
+tablaEdadCV = round(cv(svyby(~pea,~edadG, muestra2, svymean))*100,2)
+names(tablaEdadCV) = c("CV Activos","CV Inactivos")
+```
+
+En el caso de la proporción de PEA por edad, se observa que las edades de entre 18 y 59 años registran mayor proporción de PEA (entre 18 y 40 años es menor, probablemente debido a ls jóvenes estudiantes que son *Inactivos*)  
+
+**Cuadro 3.b.3 - Proporción de PEA por edad en %**
+```{r,comment="",echo=FALSE}
+tablaEdad
+```
+
+Como se puede observar en las tablas de los coeficientes, solo la celda de Activos de entre 10 y 17 supera la restricción del 20%. En ese caso, si se desea realizar estimaciones para esa subpoblación se podría realizar un muestreo estratificado que ofrezca representatividad pare la misma.
+
+**Cuadro 3.b.4 - Coeficiente de variación de las estimaciones en %**
+```{r,comment="",echo=FALSE}
+tablaEdadCV
+```
+
+
+
+```{r}
+#nivel educativo
+tablaEduc = svyby(~pea,~nivel.ed, muestra2, svymean, keep.var=F)
+tablaEduc = tablaEduc[,2:3]
+names(tablaEduc) = c("Activos","Inactivos")
+tablaEduc = round(100 * tablaEduc, 2)
+tablaEducCV = round(cv(svyby(~pea,~nivel.ed, muestra2, svymean))*100,2)
+names(tablaEducCV) = c("CV Activos","CV Inactivos")
+```
+
+
+A la hora d observar la proporción de población económicamente activa de acuerdo al nivel educativo, se observa que los niveles educativos con mayor proporción son *Superior Universitaria Completa*, *Secundaria completa* y *Primaria completa*. Seguramente hacia el interior se observen diferencias vinculadas con la condición de ocupación y el ingreso medio.
+
+**Cuadro 3.b.5 - Proporción de PEA por nivel educativo en %**
+```{r,comment="",echo=FALSE}
+tablaEduc
+```
+
+Como se puede observar en las tablas de los coeficientes los casos que superan la restricción del 20% son aquellos *Activos sin instrucción* y apenas por encima del límite los *Inactivos Superior Universitaria Completa*. Estas son poblaciones no tradicionales, más aquella que ésta y seguramente sean pocos casos en la muestra. Puede realizarse un muestreo estratificado que apunte a lograr los casos necesarios de esas subpoblaciones o puede agruparse *Sin instrucción* con *Primaria incompleta*.
+
+**Cuadro 3.b.6 - Coeficiente de variación de las estimaciones en %**
+```{r,comment="",echo=FALSE}
+tablaEducCV
+```
+
+
+```{r}
+#situación conyugal
+tablaConyu = svyby(~pea,~sit.cony, muestra2, svymean, keep.var=F)
+tablaConyu = tablaConyu[,2:3]
+names(tablaConyu) = c("Activos","Inactivos")
+tablaConyu = round(100 * tablaConyu, 2)
+tablaConyuCV = round(cv(svyby(~pea,~sit.cony, muestra2, svymean))*100,2)
+names(tablaConyuCV) = c("CV Activos","CV Inactivos")
+```
+
+El corte por situación conyugal no ofrece otra información que una merma en la proporción de la población económicamente activa entre los *Viudos* y los *Solteros*, seguramente vinculado con la edad. Es plausible de esperar (dada además la distribución previa por edad) que los *Solteros* sean inactivos por ser estudiantes y los *Viudos* por retirados. Esta categoría, a su vez, seguramente este relacionada con el sexo en la medida en que las mujeres tienen mayor sobrevida media que los hombres. 
+
+**Cuadro 3.b.7 - Proporción de PEA por sitación conyugal en %**
+```{r,comment="",echo=FALSE}
+tablaConyu
+```
+
+Como se puede observar en las tablas nuevamente en las poblaciones atípicas los coeficientes de variación superan la restricción del 20%. Las soluciones pueden ir en el sentido de las previamente mencionadas.
+
+**Cuadro 3.b.8 - Coeficiente de variación de las estimaciones en %**
+```{r,comment="",echo=FALSE}
+tablaConyuCV
+```
+
+
+
+```{r,echo=FALSE}
+#regiones (NEA, NOA, Pampeana, Cuyo, Patagonia, CABA)
+muestra2$variables$region = NA
+muestra2$variables$region[muestra2$variables$provincia == "Corrientes" |
+                            muestra2$variables$provincia == "Formosa" |
+                            muestra2$variables$provincia == "Chaco" |
+                            muestra2$variables$provincia == "Misiones" ] = 1 #NEA
+muestra2$variables$region[muestra2$variables$provincia == "Catamarca" |
+                            muestra2$variables$provincia == "Tucumán" |
+                            muestra2$variables$provincia == "Jujuy" |
+                            muestra2$variables$provincia == "Santiago del Estero" |
+                            muestra2$variables$provincia == "Salta" |
+                            muestra2$variables$provincia == "La Rioja" ] = 2 #NOA
+muestra2$variables$region[muestra2$variables$provincia == "Buenos Aires" |
+                            muestra2$variables$provincia == "Córdoba" |
+                            muestra2$variables$provincia == "Entre Ríos" |
+                            muestra2$variables$provincia == "Santa Fe" |
+                            muestra2$variables$provincia == "Buenos Aires" |
+                            muestra2$variables$provincia == "La Pampa" ] = 3 #Pampeana
+muestra2$variables$region[muestra2$variables$provincia == "Mendoza" |
+                            muestra2$variables$provincia == "San Juan" |
+                            muestra2$variables$provincia == "San Luis" ] = 4 #Cuyo
+muestra2$variables$region[muestra2$variables$provincia == "Santa Cruz" |
+                            muestra2$variables$provincia == "Chubut" |
+                            muestra2$variables$provincia == "Tierra del Fuego" |
+                            muestra2$variables$provincia == "Río Negro" |
+                            muestra2$variables$provincia == "Neuquén" ] = 5 #Patagonia
+muestra2$variables$region[muestra2$variables$provincia == "Ciudad de Buenos Aires" ] = 6 #CABA
+
+
+muestra2$variables$region=factor(muestra2$variables$region,
+                                 levels=1:6,
+                                 labels = c("NEA", "NOA", "Pampeana", "Cuyo", "Patagonia", "CABA"))
+```
+
+
+
+
+```{r}
+#Region
+tablaRegion = svyby(~pea,~region, muestra2, svymean, keep.var=F)
+tablaRegion = tablaRegion[,2:3]
+names(tablaRegion) = c("Activos","Inactivos")
+tablaRegion = round(100 * tablaRegion, 2)
+tablaRegionCV = round(cv(svyby(~pea,~region, muestra2, svymean))*100,2)
+names(tablaRegionCV) = c("CV Activos","CV Inactivos")
+```
+
+A la hora de observar la proporción por región se observa que las regiones con mayor proporción de población económicamente activa son la región Patagónica y CABA. 
+
+**Cuadro 3.b.9 - Proporción de PEA por región en %**
+```{r,comment="",echo=FALSE}
+tablaRegion
+```
+
+Finalmente, el coeficiente de variación solamente supera la restricción impuesta para la proporción de *Inactivos* en la Ciudad de Buenos Aires.
+
+**Cuadro 3.b.10 - Coeficiente de variación de las estimaciones en %**
+```{r,comment="",echo=FALSE}
+tablaRegionCV
+```
+
+
+##c) Estimar la tasa de desocupación. ¿Está estimando una proporción o una razón? ¿Por qué? ¿Es posible utilizar el estimador de HT en este caso? ¿Por qué?
+
+La tasa de desocupación se calcula como la **razón** entre la población ocupada y la población económicamente activa. Ambas cantidades, tanto el nominador como el denominador, son estimaciones. Por lo tanto no es posible utilizar el estimador HT en la medida en que el estimador de la tasa de desocupación no es una combinación lineal de variables aleatorias Por más que ambos sean estimadores insesgados, el estimador para la razón no lo será. Es decir, por más que el estimador de la población económicamente activa y el de la población desocupada sean insesgados, no lo será el estimador para la tasa de desocupación. Al no ser una función lineal en los parámetros, no puede calcularse una varianza.[^sarndal] 
+
+[^sarndal]:Sarndal, Swenson, and Wretman (1992), Model Assisted Survey Sampling, Springer-Verlag, pag 162
+
+##d) Estimar el ingreso promedio para la población en general y para cada una de las categorías ocupacionales. ¿Cuál es la diferencia entre ambos estimadores? ¿Es posible publicar todas las estimaciones teniendo en cuenta el límite del 20% para los CV?
+
+```{r}
+#Ingreso
+tablaIngreso = svyby(~ingreso,~estado, muestra2, svymean, keep.var=F)
+tablaIngreso$CV = round(cv(svyby(~ingreso,~estado, muestra2, svymean))*100,2)
+tablaIngreso = tablaIngreso[,2:3]
+tablaIngreso[4,] = c(svymean(~ingreso, muestra2)[1],
+                     round(cv(svymean(~ingreso, muestra2))*100,2))
+
+rownames(tablaIngreso) = c("Ocupado","Desocupado","Inactivo","Total")
+names(tablaIngreso) = c("Ingreso medio","CV")
+```
+
+El ingreso medio para la población general es del orden de los `r round(tablaIngreso[4,1],2)`\$. Mientras que para los *Ocupados* aumenta a `r round(tablaIngreso[1,1],2)`\$. De las estimaciones, la única que presenta un coeficiente de variación por encima de la restricción impuesta del 20% es para la categoría *Desocupado*. 
+
+**Cuadro 3.d.1 - Estimación del ingreso medio (en $) y Coeficiente de variación (en %) en la población total y por condición de actividad **
+```{r,comment="",echo=FALSE}
+tablaIngreso
+```
